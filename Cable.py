@@ -41,3 +41,5 @@ class Cable:
 
     def __str__(self):
         return f"Cable SN: {self.serial_number}\n"
+    def create_matrix(self, matrixData):
+        return None

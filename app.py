@@ -14,12 +14,15 @@ os.makedirs("temp", exist_ok=True)
 uploaded_files = st.file_uploader("Upload your CSV files", type="csv", accept_multiple_files=True)
 cables = []
 
-pattern = re.compile(r"0[0-4].{8}")
+pattern = re.compile(r"(?<![A-Za-z0-9])0[0-4][A-Za-z0-9]{8}(?![A-Za-z0-9])", re.IGNORECASE)
 
 if uploaded_files:
     for uploaded_file in uploaded_files:
         serial_number = "Unknown"
-        match = pattern.search(uploaded_file.title)  # or uploaded_file.name
+            
+        target_text = uploaded_file.name
+
+        match = pattern.search(target_text)  # or uploaded_file.name
         if match:
             serial_number = match.group()
             if len(serial_number) >= 2:
@@ -39,17 +42,10 @@ if uploaded_files:
                         cable_length = 15
 
             cable = Cable(cable_type, cable_length, serial_number)
-            
+            upload_and_split_file(cable, uploaded_file)
 
-    # Upload and split the file
-        upload_and_split_file(uploaded_file)
-        with open("temp/txt_temp.txt", "r", encoding="utf-8") as txt_file:
-            for line in txt_file:
-                match = re.search(r"S/N[:\s,]*([A-Z0-9]+)", line)
-                if match:
-                    serial_number = match.group(1)
-                    break
-        # Read the CSV data into a DataFrame
+
+    
         df = pd.read_csv("temp/csv_temp.csv")
         df.columns = df.columns.str.strip()
         matrix = create_matrix(df)

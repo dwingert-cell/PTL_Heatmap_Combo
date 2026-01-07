@@ -3,8 +3,19 @@ import os
 from Cable import Cable
 import re
 
-filenames = ["Leakage Fail-selected\\017AB4A061.csv","Leakage Fail-selected\\016B6CC061.csv","Leakage Fail-selected\\017AC03061.csv", "TeslaData\\11989-0312-Continuity-Test-Inv-RevC_TestReport_ParadiseContinuity_791_1_03AA0B0071.csv",
-             "TeslaData\\11989-0312-Leakage Rev A_TestReport_Eagle Tester 1_184_1_03AA0B0071.csv"]
+
+from pathlib import Path
+
+filenames = [
+    "Leakage Fail-selected\\017AB4A061.csv",
+    "Leakage Fail-selected\\016B6CC061.csv",
+    "Leakage Fail-selected\\017AC03061.csv",
+    "TeslaData\\11989-0312-Continuity-Test-RevC_TestReport_ParadiseContinuity_1114_1_03AA0B0071.csv",
+    "TeslaData\\11989-0312-Leakage Rev A_TestReport_Eagle Tester 1_184_1_03AA0B0071.csv",
+]
+
+paths = [Path(p) for p in filenames]
+
 os.makedirs("temp", exist_ok=True)
 cables = []
 
@@ -12,9 +23,12 @@ cables = []
 
 pattern = re.compile(r"(?<![A-Za-z0-9])0[0-4][A-Za-z0-9]{8}(?![A-Za-z0-9])", re.IGNORECASE)
 
-for uploaded_file in filenames:
+for uploaded_file in paths:
     serial_number = "Unknown"
-    match = pattern.search(uploaded_file)  # or uploaded_file.name
+    
+    target_text = uploaded_file.name
+
+    match = pattern.search(target_text)  # or uploaded_file.name
     if match:
         serial_number = match.group()
         if len(serial_number) >= 2:
@@ -34,6 +48,8 @@ for uploaded_file in filenames:
                     cable_length = 15
 
         cable = Cable(cable_type, cable_length, serial_number)
+        upload_and_split_file(cable, uploaded_file)
+        print("------------------------------------------------------------- \n")
         print("Cable serial number: ", {cable.serial_number}, "\n")
         print("Cable Length: ", {cable.length}, "\n")
         print("Cable type: ", {cable.type}, "\n")
@@ -41,3 +57,5 @@ for uploaded_file in filenames:
             print("Cable leakage data: ", {cable.leakage.head}, "\n")
         if(cable.continuity is not None):
             print("Cable continuity data :", {cable.continuity.head}, "\n")
+        print("------------------------------------------------------------- \n")
+
