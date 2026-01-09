@@ -6,7 +6,6 @@ from Cable import Cable
 from Heatmap import display_matrix  
 from uploadData import process_csv
 import os
-from createMatrix import create_matrix
 from Tesla import Tesla
 from Paradise import Paradise
 
@@ -92,41 +91,80 @@ def render_group_of_six_buttons(
 
 
 
+
+import pandas as pd
+
 def build_master_dataframe(
     cables: dict,
     cable_type: str,
     attr_name: str,
 ):
+    """
+    Build a master DataFrame for the given cable type and data attribute.
+    - Deduplicates each cable's DataFrame by taking the max per key (first column).
+    - Merges all cables on the shared first column via outer join.
+    - If duplicates remain, collapses them by taking column-wise max per key.
+    """
 
     dfs = []
 
     for cable in cables.values():
-        if cable.type != cable_type:
+        if getattr(cable, "type", None) != cable_type:
             continue
 
         df = getattr(cable, attr_name, None)
         if df is None or df.empty:
             continue
-        tmp = df.iloc[:, :2].copy()
-        # Rename columns:
-        shared_col = tmp.columns[0]
-        tmp.columns = [shared_col, cable.serial_number]
-        dfs.append(tmp)
-    if not dfs:
-            return None, f"No {attr_name} data found for {cable_type} cables."
 
-    master_df = dfs[0]
+        # Work with first two columns: [shared_key, measurement]
+        tmp = df.iloc[:, :2].copy()
+        shared_col = tmp.columns[0]
+        meas_col   = tmp.columns[1]
+
+        # Ensure measurement is numeric for max calculation
+        tmp[meas_col] = pd.to_numeric(tmp[meas_col], errors="coerce")
+
+        # 1) Deduplicate within this cable: max per key
+        tmp = (
+            tmp.groupby(shared_col, as_index=False)
+               .agg({meas_col: "max"})
+        )
+
+        # 2) Rename measurement column to the cable's serial number
+        tmp = tmp.rename(columns={meas_col: cable.serial_number})
+
+        dfs.append(tmp)
+
+    if not dfs:
+        return None, f"No {attr_name} data found for {cable_type} cables."
+
+    # Use the first DataFrame's first column name as the join key
+    master_df = dfs[0].copy()
     key_col = master_df.columns[0]
 
-    for df in dfs[1:]:
-        master_df = master_df.merge(df, on=key_col, how="outer")
+    # 3) Merge all cables on shared key
+    for df_i in dfs[1:]:
+        # Align key column name if differs
+        if df_i.columns[0] != key_col:
+            df_i = df_i.rename(columns={df_i.columns[0]: key_col})
+        master_df = master_df.merge(df_i, on=key_col, how="outer")
 
-    # Sort by the shared column (numeric if possible)
+    # 4) If any duplicate keys exist post-merge, collapse by max per column
+    # Convert all measurement columns to numeric for max; leave key untouched
+    meas_cols = [c for c in master_df.columns if c != key_col]
+    for c in meas_cols:
+        master_df[c] = pd.to_numeric(master_df[c], errors="coerce")
+
+    master_df = (
+        master_df.groupby(key_col, as_index=False)
+                 .max(numeric_only=True)
+    )
+
+    # 5) Sort by the shared key (numeric if possible)
     master_df[key_col] = pd.to_numeric(master_df[key_col], errors="ignore")
     master_df = master_df.sort_values(by=key_col)
 
     return master_df, None
-
 
 
 def build_zip_for_cable(cable, base_map=None, temp_root="."):
@@ -256,9 +294,7 @@ if uploaded_files:
 
 
     disabled_leakage = getattr(cable, "leakage", None) is None
-    print(getattr(cable, "leakage", None))
     disabled_1s = getattr(cable, "leakage_1s", None) is None
-    print(getattr(cable, "leakage_1s", None))
 
     header_cols = st.columns(COL_LAYOUT)
     header_cols[0].markdown("**Serial Number**")

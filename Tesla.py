@@ -116,12 +116,10 @@ class Tesla(Cable):
     def create_matrix(self, matrix_type): 
         if(matrix_type == "leakage"):
             df = self.leakage.copy()
-            print("\ndf for LEAKAGE: ")
-            print(df)
+
         elif(matrix_type == "1s"):
             df = self.leakage_1s.copy()
-            print("\ndf for 1s: ")
-            print(df)
+
     
         df_idx = (
             df.drop_duplicates(subset="Channel", keep="first")
@@ -184,10 +182,6 @@ class Tesla(Cable):
         nodes = np.linspace(0, 1, len(colors))
         custom_cmap = LinearSegmentedColormap.from_list("custom_red_extended", list(zip(nodes, colors)))
 
-
-        print(ordered.head)
-        """draw the damn heat map using matplotlib"""
-        print("drawing tesla heatmap")
         top_leakage, topS_leakage, bottomS_leakage, bottom_leakage = self.split_top_bottom(matrix_type)
 
 

@@ -65,8 +65,7 @@ class Paradise(Cable):
         ordered = df_idx.reindex(self.order)
 
         ordered = ordered.reset_index()
-        print("ordered : \n")
-        print(ordered)
+
 
         ordered["Leakage"] = pd.to_numeric(
             ordered["Measured_pA"], errors="coerce"
@@ -94,7 +93,6 @@ class Paradise(Cable):
         top_leakage, bottom_leakage = self.split_top_bottom(matrix_type)
         top_leakage = top_leakage.reshape(1, -1)  
         bottom_leakage = bottom_leakage.reshape(1, -1)
-        print("Top len:", len(self.Top))
         fig, axes = plt.subplots(3, 1, figsize=(24, 8), 
                                 gridspec_kw={'height_ratios': [1, 0.1, 1]})
         fig.suptitle(f'Heatmap for cable with SN: {self.serial_number}', fontsize=20)
