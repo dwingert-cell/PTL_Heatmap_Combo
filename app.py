@@ -232,7 +232,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("Heatmap Visualization for Cables")
+st.title("PTL Cable Data Analysis")
 
 os.makedirs("temp", exist_ok=True)
 uploaded_files = st.file_uploader("Upload your CSV files", type="csv", accept_multiple_files=True)
