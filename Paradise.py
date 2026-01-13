@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 import numpy as np
 import seaborn as sns
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 
 class Paradise(Cable):
@@ -115,3 +117,88 @@ class Paradise(Cable):
         # Adjust layout to make room for the title
         plt.tight_layout(rect=[0, 0, 1, 0.90])
         return fig, axes
+
+    def draw_heatmap_plotly(self, matrix_type):
+
+        # Convert 0–1 float tuples into "rgb(r,g,b)" strings for Plotly
+        colors = [
+            (0, 0, 255),      # deep blue
+            (77, 77, 255),    # intermediate blue
+            (153, 153, 255),  # light blue
+            (255, 255, 255),  # white
+            (255, 153, 153),  # light red
+            (255, 77, 77),    # intermediate red
+            (255, 0, 0)       # full red
+        ]
+        nodes = np.linspace(0, 1, len(colors))
+        custom_colorscale = [(float(p), f"rgb({r},{g},{b})") for p, (r, g, b) in zip(nodes, colors)]
+
+        # --- Split into TOP/BOTTOM arrays (shape 1 x N for heatmap strip)
+        top_leakage, bottom_leakage = self.split_top_bottom(matrix_type)
+        top_leakage = top_leakage.reshape(1, -1)
+        bottom_leakage = bottom_leakage.reshape(1, -1)
+
+        # --- Create subplot layout: 3 rows (top heatmap / blank / bottom heatmap)
+        fig = make_subplots(
+            rows=3, cols=1,
+            row_heights=[0.45, 0.10, 0.45],
+            vertical_spacing=0.02,
+            shared_xaxes=False
+        )
+
+        # --- Top heatmap
+        fig.add_trace(
+            go.Heatmap(
+                z=top_leakage,
+                x=self.Top,
+                y=[''],  # single row label; we'll hide Y axis anyway
+                colorscale=custom_colorscale,
+                zmin=0.0, zmax=600.0,  # match vmin/vmax
+                showscale=True,
+                colorbar=dict(title="Leakage (pA)"),
+                hovertemplate="Channel: %{x}<br>Leakage: %{z:.1f} pA<extra></extra>"
+            ),
+            row=1, col=1
+        )
+
+        # --- Middle row blank
+        fig.update_xaxes(visible=False, row=2, col=1)
+        fig.update_yaxes(visible=False, row=2, col=1)
+
+        # --- Bottom heatmap
+        fig.add_trace(
+            go.Heatmap(
+                z=bottom_leakage,
+                x=self.Bottom,
+                y=[''],  # single row label; we'll hide Y axis anyway
+                colorscale=custom_colorscale,
+                zmin=0.0, zmax=800.0,
+                showscale=True,
+                colorbar=dict(title="Leakage (pA)"),
+
+                hovertemplate="Channel: %{x}<br>Leakage: %{z:.1f} pA<extra></extra>"
+            ),
+            row=3, col=1
+        )
+
+        # --- Styling/axes
+        fig.update_yaxes(visible=False, row=1, col=1)
+        fig.update_yaxes(visible=False, row=3, col=1)
+        fig.update_xaxes(side="top",    row=1, col=1)  # Top
+        fig.update_xaxes(side="bottom", row=3, col=1)  # Bottom
+
+        fig.update_layout(
+            title={
+                "text": f"{self.type} Heatmap for cable with SN: {self.serial_number}",
+                "x": 0.5,
+                "xanchor": "center",
+                "y": 0.98,
+                "yanchor": "top",
+                "pad": {"b": 20},   # space BELOW the title
+                "font": {"size": 20}
+            },
+            height=400,
+            margin=dict(t=80, r=120, b=40, l=40)
+        )
+
+        return fig

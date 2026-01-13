@@ -8,17 +8,252 @@ from uploadData import process_csv
 import os
 from Tesla import Tesla
 from Paradise import Paradise
+import numpy as np
+
+import plotly.express as px
+
 
 
 import os
 import io
 import zipfile
 
+import streamlit as st
+import pandas as pd
+
+def has_data(cables, cable_type, test_type: str) -> bool:
+    """
+    Return True if 'cables' has data for the given cable_type and test_type.
+    Adjust logic based on your actual data structure.
+    """
+    if cables is None:
+        return False
+
+    for cable in cables.values():
+        if(cable.type == cable_type):
+            if(test_type == "1s"):
+                if(cable.leakage_1s is not None):
+                    return True
+            elif(test_type == "leakage"):
+                if(cable.leakage is not None):
+                    return True
+    return False
+
+
+
 def _nice_label(attr_name: str) -> str:
     return attr_name.replace("_", " ").title()
 
+def generate_max_leakage_histogram(cables, cable_type, test_type):
+    maximum_leakage_data = []
+    for cable in cables.values():
+        if(cable.type == cable_type):
+            if(test_type == "1s"):
+                cable_data = cable.leakage_1s
+            elif(test_type == "leakage"):
+                cable_data = cable.leakage   
+            else:
+                continue
+            
+            if cable_data is None or cable_data.empty:
+                continue
+            
+            if isinstance(cable_data, pd.DataFrame):
+                print(cable_data)
+                max_leakage = cable_data["Measured_pA"].to_numpy().max()
+            else:  # Series
+                max_leakage = cable_data.max()
 
-import io
+            maximum_leakage_data.append(max_leakage)
+
+    max_leakage_df = pd.DataFrame(
+            {"max_leakage": maximum_leakage_data}
+        )
+    
+    
+    bins = list(range(0, 10001, 200))  # 0, 200, 400, ..., 10000
+    labels = [f"{bins[i]}-{bins[i+1]}" for i in range(len(bins)-1)] + ["10,000+ pA"]
+
+    max_leakage_df["bin"] = pd.cut(max_leakage_df["max_leakage"], bins=bins+[np.inf], labels=labels, right=False)
+    
+
+
+    fig = px.histogram(
+            max_leakage_df,
+            x="bin",
+            title=f"Max Leakage Histogram ({cable_type}, {test_type})",
+            labels={"bin": "Leakage Range"},
+            text_auto=True,
+            
+            category_orders={"bin": labels}  # <-- Force correct order
+
+        )
+
+
+    fig.update_layout(
+        xaxis_title="Maximum Leakage",
+     template="plotly_white"
+    )
+    
+
+    fig.add_vline(
+        x=labels.index("2000-2200"),  # Position near the 2000 bin
+        line_dash="dash",
+        line_color="red",
+        annotation_text="2000 pA",
+        annotation_position="top right"
+    )
+
+
+    return max_leakage_df, fig
+
+
+def generate_all_leakage_histogram(cables, cable_type, test_type):
+    leakage_data = []
+    for cable in cables.values():
+        if(cable.type == cable_type):
+            if(test_type == "1s"):
+                cable_data = cable.leakage_1s
+            elif(test_type == "leakage"):
+                cable_data = cable.leakage   
+            else:
+                continue
+            
+            if cable_data is None or cable_data.empty:
+                continue
+            
+            if isinstance(cable_data, pd.DataFrame):
+                #extract all the cable leakage values 
+                values = cable_data.to_numpy().flatten()
+                values = pd.to_numeric(values, errors='coerce')
+                values = values[~np.isnan(values)]
+                leakage_data.extend(values)
+            
+
+            else:  # Series
+
+                values = cable_data.dropna().values
+                leakage_data.extend(values)
+
+            #append cable_data to leakage_data 
+    leakage_df = pd.DataFrame(
+            {"leakage_data": leakage_data}
+        )
+    bins = list(range(0, 10001, 200))  # 0, 200, 400, ..., 10000
+    labels = [f"{bins[i]}-{bins[i+1]}" for i in range(len(bins)-1)] + ["10,000+ pA"]
+
+    leakage_df["bin"] = pd.cut(leakage_df["leakage_data"], bins=bins+[np.inf], labels=labels, right=False)
+
+    fig = px.histogram(
+        leakage_df,
+        x="bin",
+        labels={"bin": "Leakage Range"},
+        text_auto=True,
+        category_orders={"bin": labels},  # <-- Force correct order
+        title=f"Leakage Histogram ({cable_type}, {test_type})"
+    )
+
+    fig.update_layout(
+        xaxis_title="Leakage",
+
+     template="plotly_white"
+    )
+    fig.add_vline(
+        x=labels.index("2000-2200"),  # Position near the 2000 bin
+        line_dash="dash",
+        line_color="red",
+        annotation_text="2000 pA",
+        annotation_position="top right"
+    )
+
+    return leakage_df, fig
+
+
+def render_histogram_buttons(cables, cable_type: str, group_key: str):
+    """
+    Render a row of 4 histogram/action buttons for a specific cable type.
+    """
+    st.markdown(f"#### {cable_type} – Histograms")
+
+    has_max_leakage      = has_data(cables, cable_type, test_type="leakage")
+    has_all_points       = has_data(cables, cable_type, test_type="leakage")
+    has_max_leakage_1s   = has_data(cables, cable_type, test_type="1s")
+    has_all_points_1s    = has_data(cables, cable_type, test_type="1s")
+
+    # 4 equally spaced columns for 4 histogram buttons
+    h1, h2, h3, h4 = st.columns(4)
+
+    with h1:
+        chart_slot = st.empty()
+        clicked = st.button("Max Leakage", key=f"{group_key}_hist_max_leakage", use_container_width=True, disabled = not has_max_leakage)
+        if clicked:
+            df, fig = generate_max_leakage_histogram(cables=cables, cable_type=cable_type, test_type = "leakage")
+            st.session_state[f"{group_key}_fig_1"] = fig
+        if f"{group_key}_fig_1" in st.session_state:
+            chart_slot.plotly_chart(
+                st.session_state[f"{group_key}_fig_1"],
+                use_container_width=True
+            )
+
+
+    with h2:
+        chart_slot = st.empty()
+        if st.button("All Test Points", key=f"{group_key}_hist_all_points", use_container_width=True, disabled = not has_all_points):
+            df, fig = generate_all_leakage_histogram(cables=cables, cable_type=cable_type, test_type = "leakage")
+            
+            st.session_state[f"{group_key}_fig_2"] = fig
+
+        if f"{group_key}_fig_2" in st.session_state:
+            chart_slot.plotly_chart(
+                st.session_state[f"{group_key}_fig_2"],
+                use_container_width=True
+            )
+
+
+    with h3:
+        chart_slot = st.empty()
+        if st.button("Max Leakage 1s", key=f"{group_key}_hist_leakage_1s", use_container_width=True, disabled=not has_max_leakage_1s):
+            df, fig = generate_max_leakage_histogram(cables=cables, cable_type=cable_type, test_type = "1s")
+            
+            st.session_state[f"{group_key}_fig_3"] = fig
+
+        if f"{group_key}_fig_3" in st.session_state:
+            chart_slot.plotly_chart(
+                st.session_state[f"{group_key}_fig_3"],
+                use_container_width=True
+            )
+
+
+    with h4:
+        chart_slot = st.empty()
+        if st.button("All Test Points 1s", key=f"{group_key}_hist_resistance", use_container_width=True, disabled=not has_all_points_1s):
+            df, fig = generate_all_leakage_histogram(cables=cables, cable_type=cable_type, test_type = "1s")
+            
+            st.session_state[f"{group_key}_fig_4"] = fig
+
+        if f"{group_key}_fig_4" in st.session_state:
+            chart_slot.plotly_chart(
+                st.session_state[f"{group_key}_fig_4"],
+                use_container_width=True
+            )
+
+
+
+
+def render_csv_group(cables, cable_type: str, attr_names: list, group_key: str):
+    """
+    Render your existing group of 6 CSV action buttons.
+    If you already have render_group_of_six_buttons, you can just call it here.
+    """
+    st.markdown(f"#### {cable_type} – Download CSV")
+    # If you already defined render_group_of_six_buttons, call that:
+    render_group_of_six_buttons(
+        cables,
+        cable_type=cable_type,
+        attr_names=attr_names,
+        group_key=group_key,
+    )
+
 
 def render_group_of_six_buttons(
     cables: dict,
@@ -92,7 +327,6 @@ def render_group_of_six_buttons(
 
 
 
-import pandas as pd
 
 def build_master_dataframe(
     cables: dict,
@@ -274,16 +508,60 @@ if uploaded_files:
 
             process_csv(cable, uploaded_file)
     
-    TESLA_ATTRS     = ["leakage", "leakage_1s", "resistance", "inv_resistance", "continuity", "inv_continuity"]
-    PARADISE_ATTRS  = ["leakage", "leakage_1s", "resistance", "inv_resistance", "continuity", "inv_continuity"]
+    
+    TESLA_ATTRS = [
+        "leakage", "leakage_1s", "resistance",
+        "inv_resistance", "continuity", "inv_continuity"
+    ]
+
+    PARADISE_ATTRS = [
+        "leakage", "leakage_1s", "resistance",
+        "inv_resistance", "continuity", "inv_continuity"
+    ]
 
     st.subheader("Master CSV Files")
-    
-    st.markdown("### Tesla")
-    render_group_of_six_buttons(cables, cable_type="Tesla", attr_names=TESLA_ATTRS, group_key="tesla")
 
+    # -----------------------
+    # TESLA SECTION
+    # -----------------------
+    st.markdown("### Tesla")
+
+    # 4 histogram action buttons (row)
+    render_histogram_buttons(
+        cables=cables,
+        cable_type="Tesla",
+        group_key="tesla"
+    )
+
+    # 6 CSV buttons (your existing group)
+    render_csv_group(
+        cables=cables,
+        cable_type="Tesla",
+        attr_names=TESLA_ATTRS,
+        group_key="tesla"
+    )
+
+    st.divider()
+
+    # -----------------------
+    # PARADISE SECTION
+    # -----------------------
     st.markdown("### Paradise")
-    render_group_of_six_buttons(cables, cable_type="Paradise", attr_names=PARADISE_ATTRS, group_key="paradise")
+
+    # 4 histogram action buttons (row)
+    render_histogram_buttons(
+        cables=cables,
+        cable_type="Paradise",
+        group_key="paradise"
+    )
+
+    # 6 CSV buttons (your existing group)
+    render_csv_group(
+        cables=cables,
+        cable_type="Paradise",
+        attr_names=PARADISE_ATTRS,
+        group_key="paradise"
+    )
 
     st.divider()
 
@@ -338,13 +616,18 @@ if uploaded_files:
             st.session_state[show_key_1s] = True
         
         if st.session_state[show_key_leak]:
+            fig = cable.draw_heatmap_plotly(matrix_type = "leakage")
             fig_leak, ax_leak = cable.draw_heatmap("leakage")
-            cols[3].pyplot(fig_leak, use_container_width=True)
+            cols[3].plotly_chart(fig, use_container_width=True)
+            #cols[3].pyplot(fig_leak, use_container_width=True)
 
 
         if st.session_state[show_key_1s]:
+            
+            fig = cable.draw_heatmap_plotly(matrix_type="1s")
             fig_1s, ax_1s = cable.draw_heatmap("1s")
-            cols[4].pyplot(fig_1s, use_container_width=True)
+            cols[4].plotly_chart(fig, use_container_width=True)
+            #cols[4].pyplot(fig_1s, use_container_width=True)
 
         zip_buf, zip_name_or_err = build_zip_for_cable(
             cable,

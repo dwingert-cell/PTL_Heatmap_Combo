@@ -4,6 +4,9 @@ import matplotlib.pyplot as plt
 
 from matplotlib.colors import LinearSegmentedColormap
 import numpy as np
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
 import seaborn as sns
 
 class Tesla(Cable):
@@ -285,6 +288,134 @@ class Tesla(Cable):
 
         return fig, axes
 
+
+
+
+    def draw_heatmap_plotly(self, matrix_type):
+        # Prepare data similarly to your current method
+        ordered = self.create_matrix(matrix_type)  # If you need it for ordering
+        top_leakage, topS_leakage, bottomS_leakage, bottom_leakage = self.split_top_bottom(matrix_type)
+
+        # Reshape to a single row each (Plotly expects 2D arrays)
+        top_leakage = top_leakage.reshape(1, -1)
+        topS_leakage = topS_leakage.reshape(1, -1)
+        bottomS_leakage = bottomS_leakage.reshape(1, -1)
+        bottom_leakage = bottom_leakage.reshape(1, -1)
+
+        # Convert your Matplotlib RGB tuples (0–1) to Plotly colorscale
+        # Plotly colorscale expects list of (position, "rgb(r,g,b)") with r,g,b in 0–255
+        colors = [
+            (0, 0, 255),      # deep blue
+            (77, 77, 255),    # intermediate blue
+            (153, 153, 255),  # light blue
+            (255, 255, 255),  # white
+            (255, 153, 153),  # light red
+            (255, 77, 77),    # intermediate red
+            (255, 0, 0)       # full red
+        ]
+        nodes = np.linspace(0, 1, len(colors))
+        custom_colorscale = [(float(p), f"rgb({r},{g},{b})") for p, (r, g, b) in zip(nodes, colors)]
+
+        # Create 4-row subplot layout.
+        # Height ratios roughly match your Matplotlib layout (1.0, 0.25, 0.25, 1.0).
+        fig = make_subplots(
+            rows=4, cols=1,
+            shared_xaxes=False,
+            vertical_spacing=0.2,
+            row_heights=[0.38, 0.09, 0.09, 0.38],
+        )
+
+        # Common settings
+        zmin, zmax = 0.0, 1500.0
+
+        # Row 1: Top
+        fig.add_trace(
+            go.Heatmap(
+                z=top_leakage,
+                x=self.Top,
+                y=[''],
+                colorscale=custom_colorscale,
+                zmin=zmin, zmax=zmax,
+                colorbar=dict(title="Leakage (pA)"),
+                showscale=True  # show once; you can set showscale=False on others
+            ),
+            row=1, col=1
+        )
+
+        # Row 2: TopS
+        fig.add_trace(
+            go.Heatmap(
+                z=topS_leakage,
+                x=self.TopS,
+                y=[''],
+                colorscale=custom_colorscale,
+                zmin=zmin, zmax=zmax,
+                showscale=False  # hide to avoid multiple bars
+            ),
+            row=2, col=1
+        )
+
+        # Row 3: BottomS
+        fig.add_trace(
+            go.Heatmap(
+                z=bottomS_leakage,
+                x=self.BottomS,
+                y=[''],
+                colorscale=custom_colorscale,
+                zmin=zmin, zmax=zmax,
+                showscale=False
+            ),
+            row=3, col=1
+        )
+
+        # Row 4: Bottom
+        fig.add_trace(
+            go.Heatmap(
+                z=bottom_leakage,
+                x=self.Bottom,
+                y=[''],
+                colorscale=custom_colorscale,
+                zmin=zmin, zmax=zmax,
+                showscale=False
+            ),
+            row=4, col=1
+        )
+
+
+        fig.update_xaxes(side="top",    row=1, col=1)  # Top
+        fig.update_xaxes(side="top",    row=2, col=1)  # TopS
+        fig.update_xaxes(side="bottom", row=3, col=1)  # BottomS
+        fig.update_xaxes(side="bottom", row=4, col=1)  # Bottom
+
+
+        # Rotate x tick labels to 90 degrees
+        for r in [1, 2, 3, 4]:
+            fig.update_xaxes(tickangle=90, row=r, col=1)
+
+        # Remove y-axis title text (we have subplot titles already)
+        for r in [1, 2, 3, 4]:
+            fig.update_yaxes(title="", row=r, col=1)
+
+
+
+
+        fig.update_layout(
+            title={
+                "text": f"{self.type} Heatmap for cable with SN: {self.serial_number}",
+                "x": 0.5,
+                "xanchor": "center",
+                "y": 0.98,
+                "yanchor": "top",
+                "pad": {"b": 20},   # space BELOW the title
+                "font": {"size": 20},
+
+            },
+            margin=dict(l=40, r=40, t=90, b=70),  # more top margin
+            height=400,
+        )
+
+
+        return fig
 
 
 

@@ -49,7 +49,7 @@ class Cable(ABC):
     @abstractmethod
     def create_matrix(self, matrix_type):
         pass
-    
+
     def __str__(self):
         return f"Cable SN: {self.serial_number}\n"
     def create_matrix(self, matrixData):
